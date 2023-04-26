@@ -1,0 +1,127 @@
+<script lang="ts" setup>
+  import _ from 'lodash';
+  import { PropType, onUnmounted, ref, watchEffect } from 'vue';
+  import { IGeoAddress } from '@/modules/geo/types/geo.type';
+
+  import {
+    addresses,
+    isShowAddressSearchResult
+  } from '@/modules/geo/composables/suggest';
+  import { $projectService } from '@/shared/services/index.js';
+  import IconLocation from '@/assets/svg/location.svg?component';
+  import { useErrorHandler } from '@/composables/errors';
+  import YandexMap from './YandexMap.vue';
+  import { toastNotification } from '@/composables/toast';
+  import { YM_DEFAULT_CENTER } from '@/shared/constants';
+
+  const emit = defineEmits(['change']);
+
+  const props = defineProps({
+    address: {
+      type: String,
+      default: null
+    },
+    location: {
+      type: Array as PropType<number[]>,
+      default: YM_DEFAULT_CENTER
+    },
+    placeholder: {
+      type: String,
+      default: null
+    }
+  });
+
+  const model = ref('');
+
+  const search = _.debounce(async () => {
+    await searchSuggestion();
+  }, 1000);
+
+  async function searchSuggestion() {
+    isShowAddressSearchResult.value = true;
+
+    try {
+      const data = await $projectService.repository.suggestAddress({
+        search: model.value
+      });
+
+      addresses.value = data;
+    } catch (error) {
+      useErrorHandler(error);
+    }
+  }
+
+  const setAddress = (item: IGeoAddress) => {
+    emit('change', item);
+    addresses.value = [];
+
+    isShowAddressSearchResult.value = false;
+  };
+
+  async function updateAddress(coordinates: any) {
+    ymaps.geocode(coordinates, { kind: 'house' }).then((r: any) => {
+      const location = r.geoObjects.get(0);
+      if (!location) {
+        toastNotification(
+          'error',
+          'Не удалось определить адрес, пожалуйста, введите адрес вручную'
+        );
+        return;
+      }
+
+      const address =
+        location.properties.get('metaDataProperty').GeocoderMetaData.Address;
+
+      if (!address.formatted) {
+        toastNotification('error', 'Некорректный адрес');
+      }
+
+      model.value = address.formatted;
+      searchSuggestion();
+    });
+  }
+
+  watchEffect(() => {
+    model.value = props.address;
+  });
+
+</script>
+
+<template>
+  <div class="relative">
+    <div class="">
+      <input
+        v-model="model"
+        class="py-2.5 px-3 border border-light-200 bg-light-200 rounded-md w-full text-sm placeholder:text-light-900"
+        placeholder="Адрес"
+        type="text"
+        @input="search" />
+    </div>
+    <div
+      v-if="isShowAddressSearchResult"
+      class="absolute top-full left-0 w-full z-20">
+      <div
+        class="bg-white rounded-md overflow-x-hidden overflow-y-auto shadow-xl max-h-80">
+        <div
+          v-for="(item, index) in addresses"
+          :key="index"
+          class="cursor-pointer py-5 px-5 hover:bg-light-300 flex items-center"
+          @click.prevent="setAddress(item)">
+          <div class="flex flex-1 flex-col">
+            <div class="mb-1 text-dark-600">{{ item.formatted }}</div>
+            <div
+              v-if="item.street"
+              class="text-sm text-dark-600/70">
+              {{ item.street }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="">
+    <YandexMap
+      @click="updateAddress"
+      :location="location" />
+  </div>
+</template>

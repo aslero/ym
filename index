@@ -1,0 +1,52 @@
+<script lang="ts" setup>
+  import { computed, onMount, watch } from 'vue';
+
+  import AddressAutocomplete from '@/modules/geo/components/AddressAutocomplete.vue';
+  import {
+    formData as form,
+    companyLegalInfoType,
+    companyLegalInfo,
+    isPending,
+    getCompanyData,
+    setAddress,
+    setLogo,
+    deleteLogo,
+    updateData
+  } from '../../composables/company';
+
+  const location = computed({
+    get: () => [form.address.lng, form.address.lat],
+    set: (newValue) => {
+      form.address.lng = newValue[0];
+      form.address.lat = newValue[1];
+    }
+  });
+
+  watch(
+    () => form.address,
+    (newValue) => {
+      location.value = [newValue.lng, newValue.lat];
+    }
+  );
+
+  onMount(() => {
+    getCompanyData();
+  });
+</script>
+
+<template>
+
+    <div class="mt-4">
+      <div class="text-dark-600 font-bold mb-3">Адрес</div>
+      <span class="block mb-2 text-xs text-dark-600"
+        >Адрес компании на карте</span
+      >
+      <div class="w-full mb-2">
+        {{ form.address }}
+        <AddressAutocomplete
+          :address="form.address?.formatted"
+          @change="setAddress"
+          :location="location" />
+      </div>
+    </div>
+</template>

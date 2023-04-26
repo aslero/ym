@@ -1,0 +1,118 @@
+<script setup lang="ts">
+  import { onMounted, defineProps, PropType, ref, computed, watch } from 'vue';
+  import { YM_DEFAULT_CENTER } from '@/shared/constants';
+
+  const emits = defineEmits(['click']);
+
+  const props = defineProps({
+    location: {
+      type: Array as PropType<number[]>,
+      default: YM_DEFAULT_CENTER
+    }
+  });
+
+  let map: any = null;
+  let marker: any = null;
+  const iconCaption = ref('поиск...');
+  const timer = ref();
+
+  const location = computed(() => props.location);
+
+  const createPlacemark = (coords: number[]) => {
+    return new ymaps.Placemark(
+      coords,
+      {
+        iconCaption: iconCaption.value
+      },
+      {
+        preset: 'islands#violetDotIconWithCaption',
+        draggable: true
+      }
+    );
+  };
+
+  function setCenter(center: any, zoom = null) {
+    if (typeof ymaps === 'undefined' || !map) {
+      return;
+    }
+    map && map.setCenter(center);
+    if (zoom) {
+      map && map.setZoom(zoom);
+    }
+  }
+
+  const getAddress = (coords: number[]) => {
+    iconCaption.value = 'поиск...';
+    marker.properties.set('iconCaption', 'поиск...');
+    setCenter(coords);
+
+    ymaps.geocode(coords).then((res: any) => {
+      const firstGeoObject = res.geoObjects.get(0);
+      marker.properties.set({
+        iconCaption: firstGeoObject.getAddressLine(),
+
+        balloonContent: firstGeoObject.getAddressLine()
+      });
+    });
+  };
+
+  const setAddress = (coords: number[]) => {
+    if (marker) {
+      marker.geometry.setCoordinates(coords);
+    } else {
+      marker = createPlacemark(coords);
+      map.geoObjects.add(marker);
+      marker.events.add('dragend', () => {
+        emits('click', marker.geometry.getCoordinates());
+        getAddress(marker.geometry.getCoordinates());
+      });
+    }
+    getAddress(coords);
+  };
+
+  const handleMapClick = (e) => {
+    const coords = e.get('coords');
+    emits('click', coords);
+    setAddress(coords);
+  };
+
+  watch(
+    () => location.value,
+    (newValue) => {
+      if (newValue) {
+        clearInterval(timer.value);
+        setTimeout(() => {
+          timer.value = setAddress(newValue);
+        }, 1000);
+      }
+    },
+    { immediate: true }
+  );
+
+  onMounted(() => {
+    ymaps.ready(() => {
+      map = new ymaps.Map(
+        'map',
+        {
+          center: location.value,
+          zoom: 14
+        },
+        {
+          searchControlProvider: 'yandex#search'
+        }
+      );
+
+      map.events.add('click', handleMapClick);
+    });
+  });
+</script>
+
+<template>
+  <div class="map-container">
+    {{ location }}
+    <div
+      id="map"
+      class="w-full h-96"
+      ref="map"></div>
+  </div>
+</template>
